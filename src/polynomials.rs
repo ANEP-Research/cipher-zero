@@ -52,19 +52,19 @@ impl Polynomial {
 
     pub fn rem(&self, other: &Polynomial) -> (Polynomial, Vec<i64>) {
         let mut res = self.data.clone();
-        assert_eq!(self.deg() - other.deg() <= 1, true);
         assert_eq!(self.p, other.p);
         let mut quot = vec![];
-        for i in 0..=(self.deg() - other.deg()) {
-            let d = mod_inv(other.data[0], EBF)*res[i];
+        for i in (other.deg()..=self.deg()).rev() {
+            let d = (mod_inv(other.data[other.deg()], EBF)*res[i])%EBF;
             quot.push(d);
             for j in 0..=other.deg() {
-                res[i+j] -= d*other.data[j];
-                res[i+j] %= self.p;
-                res[i+j] += self.p;
-                res[i+j] %= self.p;
+                res[i-j] -= d*other.data[other.deg()-j];
+                res[i-j] %= self.p;
+                res[i-j] += self.p;
+                res[i-j] %= self.p;
             }
         }
+        quot.reverse();
         (Polynomial::new(res, self.p), quot)
     }
 

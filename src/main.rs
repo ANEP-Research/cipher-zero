@@ -17,6 +17,8 @@ pub fn inv_substitute(x: i64) -> i64 {
 
 const EBF: i64 = 1 << 9;
 const BF: i64 = 1 << 8;
+const BLOCK_SIZE: usize = 16;
+const ROUNDS: usize = 8;
 
 use polynomials::Polynomial;
 
@@ -41,6 +43,7 @@ impl Graph {
             res.push((u as i64) % BF);
             res.push((v as i64) % BF);
         }
+        res.pop();
         res
     }
 
@@ -53,8 +56,58 @@ impl Graph {
     }
 }
 
-fn encrypt(p: Polynomial, g: Graph) -> (Polynomial, Vec<i64>) {
+fn get_round(p: Polynomial, g: Graph, num: usize) -> Polynomial {
+    let seq = g.expand_sequence();
     let k = g.generate_key();
+    assert_eq!(p.p, EBF); // Must be EBF
+    let mut before = p.clone();
+    for i in 0..before.data.len() {
+        before.data[i] ^= seq[i % seq.len()];
+    }
+    let (c, mut q) = before.rem(&k);
+    let mut new_data = c.data.get(0..k.deg()).unwrap().to_vec();
+    new_data.append(&mut q);
+    if num % 2 == 1 {
+        new_data.reverse();
+    }
+    for i in 0..new_data.len() {
+        new_data[i] ^= seq[i % seq.len()];
+    }
+    Polynomial::new(new_data, EBF)
+}
+
+fn get_round_inv(p: Polynomial, g: Graph, num: usize) -> Polynomial {
+    let seq = g.expand_sequence();
+    let k = g.generate_key();
+    assert_eq!(p.p, EBF); // Must be EBF
+    let mut data = p.data.clone();
+    for i in 0..data.len() {
+        data[i] ^= seq[i % seq.len()];
+    }
+    if num % 2 == 1 {
+        data.reverse();
+    }
+    let c_len = k.deg();
+    let c: Vec<i64> = data.get(0..c_len).unwrap().to_vec();
+    let q: Vec<i64> = data.get(c_len..).unwrap().to_vec();
+    let mut res = vec![0;data.len()];
+    for i in 0..c.len() {
+        res[i] += c[i];
+        res[i] %= EBF;
+    }
+    for i in 0..=(p.deg() - k.deg()) {
+        for j in 0..=k.deg() {
+            res[i+j] += q[i]*k.data[j];
+            res[i+j] %= EBF;
+        }
+    }
+    for i in 0..res.len() {
+        res[i] ^= seq[i % seq.len()];
+    }
+    Polynomial::new(res, EBF)
+}
+
+fn encrypt(p: Polynomial, g: Graph) -> Polynomial {
     let s = g.expand_sequence();
     let mut p_t = p.clone();
     p_t.extend(EBF);
@@ -62,40 +115,28 @@ fn encrypt(p: Polynomial, g: Graph) -> (Polynomial, Vec<i64>) {
         p_t.data[i] ^= s[i % s.len()];
         p_t.data[i] = substitute(p_t.data[i]);
     }
-    let (mut c, mut q) = p_t.rem(&k);
-    for i in 0..=c.deg() {
-        c.data[i] ^= s[i % s.len()];
+    for num in 0..ROUNDS {
+        p_t = get_round(p_t.clone(), g.clone(), num);
     }
-    for i in 0..q.len() {
-        q[i] ^= s[i % s.len()];
-    }
-    (c, q)
+    p_t
 }
 
-fn decrypt(r: Polynomial, q: Vec<i64>, g: Graph) -> Polynomial {
+fn decrypt(p: Polynomial, g: Graph) -> Polynomial {
     let k = g.generate_key();
     let s = g.expand_sequence();
-    let mut res = r.data.clone();
-    assert_eq!(res.len() - k.data.len() <= 1, true);
-    let mut q = q.clone();
-    for i in 0..=r.deg() {
-        res[i] ^= s[i % s.len()];
+    let mut res = p.clone();
+    let mut round = ROUNDS;
+    while round > 0 {
+        res = get_round_inv(res.clone(), g.clone(), round-1);
+        round -= 1;
     }
-    for i in 0..q.len() {
-        q[i] ^= s[i % s.len()];
+    let mut r = res.data;
+    for i in 0..r.len() {
+        r[i] = inv_substitute(r[i]);
+        r[i] %= BF;
+        r[i] ^= s[i % s.len()];
     }
-    for i in 0..=(r.deg() - k.deg()) {
-        for j in 0..=k.deg() {
-            res[i+j] += q[i]*k.data[j];
-            res[i+j] %= EBF;
-        }
-    }
-    for i in 0..res.len() {
-        res[i] = inv_substitute(res[i]);
-        res[i] %= BF;
-        res[i] ^= s[i % s.len()];
-    }
-    Polynomial::new(res, BF)
+    Polynomial::new(r, BF)
 }
 
 pub fn string2poly(s: String) -> Polynomial {
@@ -139,10 +180,9 @@ fn main() {
     g.add_edge(1, 2);
     g.add_edge(3, 2);
     g.add_edge(2, 4);
-    let plaintext = String::from("ABCDEFG");
-    let (c, q) = encrypt(string2poly(plaintext.clone()), g.clone());
+    let plaintext = String::from("crack me plz");
+    let c = encrypt(string2poly(plaintext.clone()), g.clone());
     println!("Cipher text: {}", poly2hex(c.clone()));
-    println!("Quotient: {}", q[0]);
     assert_eq!(c.clone(), hex2poly(poly2hex(c.clone()), c.p));
-    assert_eq!(plaintext, poly2string(decrypt(c, q, g)));
+    assert_eq!(plaintext, poly2string(decrypt(c, g)));
 }
