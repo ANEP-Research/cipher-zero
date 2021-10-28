@@ -188,6 +188,7 @@ fn test_simple_encryption() {
     g.add_edge(1, 3);
     let plaintext = String::from(TEST_VECTOR);
     let c = encrypt(string2poly(plaintext.clone()), g.clone());
+    println!("Ciphertext: {}", poly2hex(c.clone()));
     assert_eq!(poly2hex(c.clone()), "1b61ae1be0d50120c404409f04218e1191dd");
     assert_eq!(c.clone(), hex2poly(poly2hex(c.clone()), c.p));
     assert_eq!(plaintext, poly2string(decrypt(c, g)));
@@ -209,9 +210,12 @@ fn test_wrong_graph_decryption() {
     g2.add_edge(1, 4);
     let plaintext = String::from(TEST_VECTOR);
     let c = encrypt(string2poly(plaintext.clone()), g1.clone());
+    println!("Ciphertext: {}", poly2hex(c.clone()));
     assert_eq!(poly2hex(c.clone()), "1b61ae1be0d50120c404409f04218e1191dd");
     assert_eq!(c.clone(), hex2poly(poly2hex(c.clone()), c.p));
-    assert_ne!(plaintext, poly2string(decrypt(c, g2)));
+    assert_ne!(plaintext, poly2string(decrypt(c.clone(), g2.clone())));
+    println!("Decrypted1(Real): {}", poly2hex(decrypt(c.clone(), g1.clone())));
+    println!("Decrypted2(Wrong): {}", poly2hex(decrypt(c.clone(), g2.clone())));
 }
 
 fn main() {
