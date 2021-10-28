@@ -31,6 +31,8 @@ impl Graph {
     }
 
     pub fn add_edge(&mut self, u: usize, v: usize) {
+        assert_eq!(u <= self.n, true);
+        assert_eq!(v <= self.n, true);
         self.data.push((u, v));
     }
 
@@ -174,15 +176,44 @@ pub fn hex2poly(s: String, field: i64) -> Polynomial {
     Polynomial::new(data, field)
 }
 
-fn main() {
-    // TODO: Remove below test
+const TEST_VECTOR: &'static str = "crack me plz";
+
+#[test]
+fn test_simple_encryption() {
     let mut g = Graph::new(5);
     g.add_edge(1, 2);
     g.add_edge(3, 2);
     g.add_edge(2, 4);
-    let plaintext = String::from("crack me plz");
+    g.add_edge(3, 5);
+    g.add_edge(1, 3);
+    let plaintext = String::from(TEST_VECTOR);
     let c = encrypt(string2poly(plaintext.clone()), g.clone());
-    println!("Cipher text: {}", poly2hex(c.clone()));
+    assert_eq!(poly2hex(c.clone()), "1b61ae1be0d50120c404409f04218e1191dd");
     assert_eq!(c.clone(), hex2poly(poly2hex(c.clone()), c.p));
     assert_eq!(plaintext, poly2string(decrypt(c, g)));
+}
+
+#[test]
+fn test_wrong_graph_decryption() {
+    let mut g1 = Graph::new(5);
+    g1.add_edge(1, 2);
+    g1.add_edge(3, 2);
+    g1.add_edge(2, 4);
+    g1.add_edge(3, 5);
+    g1.add_edge(1, 3);
+    let mut g2 = Graph::new(5);
+    g2.add_edge(1, 2);
+    g2.add_edge(3, 2);
+    g2.add_edge(2, 4);
+    g2.add_edge(3, 5);
+    g2.add_edge(1, 4);
+    let plaintext = String::from(TEST_VECTOR);
+    let c = encrypt(string2poly(plaintext.clone()), g1.clone());
+    assert_eq!(poly2hex(c.clone()), "1b61ae1be0d50120c404409f04218e1191dd");
+    assert_eq!(c.clone(), hex2poly(poly2hex(c.clone()), c.p));
+    assert_ne!(plaintext, poly2string(decrypt(c, g2)));
+}
+
+fn main() {
+    
 }
